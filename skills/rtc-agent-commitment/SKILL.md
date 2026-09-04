@@ -7,9 +7,11 @@ description: Use when committing, pushing, or creating PRs in the RTC Agent Work
 
 ## Overview
 
-RTC Agent Workspace 是一个**多仓库工作区**：根目录 `/Users/leichujun/Workspaces/rtc-agent/` **不是 git 仓库**，其下多个子目录各自是独立的 git 仓库，分别推送到 GitHub `rtc-agent` 组织。提交代码必须进入对应子仓库操作，不能在根目录 `git commit`。
+RTC Agent Workspace 是一个**多仓库工作区**：根目录 `~/Workspaces/rtc-agent/` **不是 git 仓库**，其下多个子目录各自是独立的
+git 仓库，分别推送到 GitHub `rtc-agent` 组织。提交代码必须进入对应子仓库操作，不能在根目录 `git commit`。
 
-**强制验证**：`cd` 进入目标仓库后，必须执行 `pwd` 确认工作目录正确（输出应包含目标仓库路径），再继续后续操作。如果 `pwd` 输出不符预期，立即停止并排查，不要继续执行 `git` 命令。
+**强制验证**：`cd` 进入目标仓库后，必须执行 `pwd` 确认工作目录正确（输出应包含目标仓库路径），再继续后续操作。如果 `pwd`
+输出不符预期，立即停止并排查，不要继续执行 `git` 命令。
 
 ## Dynamic Repo Discovery
 
@@ -17,7 +19,7 @@ RTC Agent Workspace 是一个**多仓库工作区**：根目录 `/Users/leichuju
 
 ```bash
 # 扫描所有包含 .git 子目录的目录（包括隐藏目录如 .claude）
-cd /Users/leichujun/Workspaces/rtc-agent
+cd ~/Workspaces/rtc-agent
 for d in $(find . -maxdepth 2 -type d -name ".git" 2>/dev/null | sed 's|/.git$||' | grep -v '^.$'); do
   repo_path="${d#./}"
   echo "=== $repo_path ==="
@@ -29,11 +31,13 @@ done
 ```
 
 **推断元信息**：
+
 - **默认分支**：从 `git symbolic-ref refs/remotes/origin/HEAD` 读取
 - **语言/技术栈**：从根目录文件推断（`go.mod` → Go，`package.json` → JS/TS，`Cargo.toml` → Rust）
 - **Pre-commit 检查**：从 `.claude/settings.json` 的 `hooks` 配置读取，或从 `.pre-commit-config.yaml` 读取
 
 **当前已知的仓库**（仅供参考，以动态扫描为准）：
+
 - `server/` — Go 后端，默认分支 `dev`，pre-commit 包含 `golangci-lint`
 - `web-components/` — TypeScript pnpm monorepo，默认分支 `dev`，pre-commit 包含 `pnpm typecheck`
 - `docs/` — OpenAPI 文档，默认分支 `main`
@@ -218,16 +222,16 @@ Hook 用正则扫 `sk-*` 等模式。若提交的是示例/文档里的占位符
 
 ## Common Mistakes
 
-| 错误                                                            | 正确做法                                                                                           |
-|---------------------------------------------------------------|------------------------------------------------------------------------------------------------|
-| 在根目录 `/Users/leichujun/Workspaces/rtc-agent/` 执行 `git commit` | 先 `cd` 到具体子仓库，**`pwd` 验证后再操作**                                                                 |
-| `cd <repo>` 后直接 `git commit`，没检查是否成功进入                   | `cd <repo> && pwd` — 确认输出包含目标仓库路径                                                            |
-| `git add .` 一把梭                                               | 用 `git add <paths>` 精准 stage，避免带上 `.DS_Store`、临时文件                                             |
-| Commit message 写 "update code" / "fix bug"                    | 用 Conventional Commits，描述**做了什么**                                                              |
-| 漏掉 `Co-Authored-By`                                           | 所有 AI 协作提交必须带 trailer                                                                          |
-| 跨仓库改动塞一个 commit                                               | 每个仓库独立 commit，footer 里互相引用                                                                     |
-| pre-commit 失败就 `git commit --no-verify`                       | 修问题，不要跳过 hook                                                                                  |
-| 在错误分支直接提交                                                    | 先通过动态扫描确认该仓库的默认分支，特性另开分支                                                                    |
+| 错误                                             | 正确做法                                               |
+|------------------------------------------------|----------------------------------------------------|
+| 在根目录 `~/Workspaces/rtc-agent/` 执行 `git commit` | 先 `cd` 到具体子仓库，**`pwd` 验证后再操作**                     |
+| `cd <repo>` 后直接 `git commit`，没检查是否成功进入         | `cd <repo> && pwd` — 确认输出包含目标仓库路径                  |
+| `git add .` 一把梭                                | 用 `git add <paths>` 精准 stage，避免带上 `.DS_Store`、临时文件 |
+| Commit message 写 "update code" / "fix bug"     | 用 Conventional Commits，描述**做了什么**                  |
+| 漏掉 `Co-Authored-By`                            | 所有 AI 协作提交必须带 trailer                              |
+| 跨仓库改动塞一个 commit                                | 每个仓库独立 commit，footer 里互相引用                         |
+| pre-commit 失败就 `git commit --no-verify`        | 修问题，不要跳过 hook                                      |
+| 在错误分支直接提交                                      | 先通过动态扫描确认该仓库的默认分支，特性另开分支                           |
 
 ## Quick Reference
 
