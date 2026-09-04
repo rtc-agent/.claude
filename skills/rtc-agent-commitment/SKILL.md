@@ -1,25 +1,44 @@
 ---
 name: rtc-agent-commitment
-description: Use when committing, pushing, or creating PRs in the RTC Agent Workspace — covers the multi-repo layout (server, web-components, docs, mermaid-live-editor, .claude), per-repo pre-commit hooks, Conventional Commits format, and cross-repo change coordination
+description: Use when committing, pushing, or creating PRs in the RTC Agent Workspace — covers the multi-repo layout, dynamic repo discovery, per-repo pre-commit hooks, Conventional Commits format, and cross-repo change coordination
 ---
 
 # RTC Agent Workspace — Commitment Guide
 
 ## Overview
 
-RTC Agent Workspace 是一个**多仓库工作区**：根目录 `/Users/leichujun/Workspaces/rtc-agent/` **不是 git 仓库**，其下 5 个子目录各自是独立的 git 仓库，分别推送到 GitHub `rtc-agent` 组织。提交代码必须进入对应子仓库操作，不能在根目录 `git commit`。
+RTC Agent Workspace 是一个**多仓库工作区**：根目录 `/Users/leichujun/Workspaces/rtc-agent/` **不是 git 仓库**，其下多个子目录各自是独立的 git 仓库，分别推送到 GitHub `rtc-agent` 组织。提交代码必须进入对应子仓库操作，不能在根目录 `git commit`。
 
-**强制验证**：`cd` 进入目标仓库后，必须执行 `pwd` 确认工作目录正确（输出应包含 `/server`、`/web-components` 等），再继续后续操作。如果 `pwd` 输出不符预期，立即停止并排查，不要继续执行 `git` 命令。
+**强制验证**：`cd` 进入目标仓库后，必须执行 `pwd` 确认工作目录正确（输出应包含目标仓库路径），再继续后续操作。如果 `pwd` 输出不符预期，立即停止并排查，不要继续执行 `git` 命令。
 
-## Workspace Layout
+## Dynamic Repo Discovery
 
-| 子目录 | 远程仓库 | 默认分支 | 语言 | Pre-commit 检查 |
-| --- | --- | --- | --- | --- |
-| `server/` | `rtc-agent/server` | `dev` | Go | API key · 大文件 (>5MB) · 可执行文件 · `golangci-lint` |
-| `web-components/` | `rtc-agent/web-components` | `dev` | TypeScript (pnpm monorepo) | API key · 大文件 · 可执行文件 · `pnpm typecheck` |
-| `docs/` | `rtc-agent/docs` | `main` | OpenAPI 3.1 | 无 |
-| `mermaid-live-editor/` | `rtc-agent/mermaid-live-editor` | `rtc-agent` | JavaScript | 无 |
-| `.claude/` | `rtc-agent/.claude` | `main` | 配置/文档 | 无 |
+**不要硬编码仓库列表**。新增或移除仓库时，通过扫描自动发现：
+
+```bash
+# 扫描所有包含 .git 子目录的目录（包括隐藏目录如 .claude）
+cd /Users/leichujun/Workspaces/rtc-agent
+for d in $(find . -maxdepth 2 -type d -name ".git" 2>/dev/null | sed 's|/.git$||' | grep -v '^.$'); do
+  repo_path="${d#./}"
+  echo "=== $repo_path ==="
+  echo "  remote: $(git -C "$repo_path" remote get-url origin 2>/dev/null)"
+  echo "  default branch: $(git -C "$repo_path" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's|origin/||')"
+  echo "  language: $(ls "$repo_path"/go.mod "$repo_path"/package.json "$repo_path"/Cargo.toml 2>/dev/null | head -1)"
+  echo ""
+done
+```
+
+**推断元信息**：
+- **默认分支**：从 `git symbolic-ref refs/remotes/origin/HEAD` 读取
+- **语言/技术栈**：从根目录文件推断（`go.mod` → Go，`package.json` → JS/TS，`Cargo.toml` → Rust）
+- **Pre-commit 检查**：从 `.claude/settings.json` 的 `hooks` 配置读取，或从 `.pre-commit-config.yaml` 读取
+
+**当前已知的仓库**（仅供参考，以动态扫描为准）：
+- `server/` — Go 后端，默认分支 `dev`，pre-commit 包含 `golangci-lint`
+- `web-components/` — TypeScript pnpm monorepo，默认分支 `dev`，pre-commit 包含 `pnpm typecheck`
+- `docs/` — OpenAPI 文档，默认分支 `main`
+- `mermaid-live-editor/` — JavaScript，默认分支 `rtc-agent`
+- `.claude/` — Claude Code 配置，默认分支 `main`
 
 ## When to Use
 
@@ -40,28 +59,28 @@ RTC Agent Workspace 是一个**多仓库工作区**：根目录 `/Users/leichuju
 
 ### Type
 
-| Type | 用途 |
-| --- | --- |
-| `feat` | 新功能 |
-| `fix` | 修复 bug |
-| `docs` | 仅文档变更 |
-| `style` | 格式化、分号等不影响逻辑的改动 |
-| `refactor` | 重构（不改功能、不修 bug） |
-| `perf` | 性能优化 |
-| `test` | 增加或修改测试 |
-| `build` | 构建系统或外部依赖（`go.mod`、`pnpm-lock.yaml`） |
-| `ci` | CI 配置 |
-| `chore` | 其它杂项 |
+| Type       | 用途                                   |
+|------------|--------------------------------------|
+| `feat`     | 新功能                                  |
+| `fix`      | 修复 bug                               |
+| `docs`     | 仅文档变更                                |
+| `style`    | 格式化、分号等不影响逻辑的改动                      |
+| `refactor` | 重构（不改功能、不修 bug）                      |
+| `perf`     | 性能优化                                 |
+| `test`     | 增加或修改测试                              |
+| `build`    | 构建系统或外部依赖（`go.mod`、`pnpm-lock.yaml`） |
+| `ci`       | CI 配置                                |
+| `chore`    | 其它杂项                                 |
 
 ### Scope
 
-Scope 取**受影响模块**名，小写、kebab-case：
+Scope 取**受影响模块**名，小写、kebab-case。进入仓库后，取仓库内实际的包/模块名：
 
-- `server`: 用 Go 包名（`centrifuge`, `eino-agent`, `api/handler`）
-- `web-components`: 用包名（`chat-panel`, `whiteboard`, `shared-ui`）
-- `docs`: 用 API 分组（`rooms`, `sessions`, `auth`）
-- `mermaid-live-editor`: `editor`
-- `.claude`: `skills`, `agents`, `config`
+- Go 仓库：用 Go 包名（如 `centrifuge`, `eino-agent`, `api/handler`）
+- JS/TS 仓库：用包名（如 `chat-panel`, `whiteboard`, `shared-ui`）
+- OpenAPI 仓库：用 API 分组（如 `rooms`, `sessions`, `auth`）
+- 配置仓库：`skills`, `agents`, `config`
+- 通用规则：取变更所影响的最内层模块名
 
 ### Subject
 
@@ -126,7 +145,8 @@ git commit -m "..." && \        # ⑤ 遵循 Conventional Commits
 git push origin dev             # ⑥ 推到当前分支的远端
 ```
 
-**关键**：`cd` 后必须 `pwd` 验证。如果 `pwd` 输出不包含目标仓库路径（如 `/server`、`/web-components`），说明 `cd` 失败，**立即停止**，不要继续执行后续命令。
+**关键**：`cd` 后必须 `pwd` 验证。如果 `pwd` 输出不包含目标仓库路径（如 `/server`、`/web-components`），说明 `cd` 失败，**立即停止
+**，不要继续执行后续命令。
 
 ### 跨仓库变更
 
@@ -198,16 +218,16 @@ Hook 用正则扫 `sk-*` 等模式。若提交的是示例/文档里的占位符
 
 ## Common Mistakes
 
-| 错误 | 正确做法 |
-| --- | --- |
-| 在根目录 `/Users/leichujun/Workspaces/rtc-agent/` 执行 `git commit` | 先 `cd` 到具体子仓库，**`pwd` 验证后再操作** |
-| `cd server` 后直接 `git commit`，没检查是否成功进入 | `cd server && pwd` — 确认输出包含 `/server` |
-| `git add .` 一把梭 | 用 `git add <paths>` 精准 stage，避免带上 `.DS_Store`、临时文件 |
-| Commit message 写 "update code" / "fix bug" | 用 Conventional Commits，描述**做了什么** |
-| 漏掉 `Co-Authored-By` | 所有 AI 协作提交必须带 trailer |
-| 跨仓库改动塞一个 commit | 每个仓库独立 commit，footer 里互相引用 |
-| pre-commit 失败就 `git commit --no-verify` | 修问题，不要跳过 hook |
-| 在 `main`/`master` 直接提交 | server/web-components 用 `dev`；`.claude`/docs 用 `main`；mermaid-live-editor 用 `rtc-agent`；特性另开分支 |
+| 错误                                                            | 正确做法                                                                                           |
+|---------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| 在根目录 `/Users/leichujun/Workspaces/rtc-agent/` 执行 `git commit` | 先 `cd` 到具体子仓库，**`pwd` 验证后再操作**                                                                 |
+| `cd <repo>` 后直接 `git commit`，没检查是否成功进入                   | `cd <repo> && pwd` — 确认输出包含目标仓库路径                                                            |
+| `git add .` 一把梭                                               | 用 `git add <paths>` 精准 stage，避免带上 `.DS_Store`、临时文件                                             |
+| Commit message 写 "update code" / "fix bug"                    | 用 Conventional Commits，描述**做了什么**                                                              |
+| 漏掉 `Co-Authored-By`                                           | 所有 AI 协作提交必须带 trailer                                                                          |
+| 跨仓库改动塞一个 commit                                               | 每个仓库独立 commit，footer 里互相引用                                                                     |
+| pre-commit 失败就 `git commit --no-verify`                       | 修问题，不要跳过 hook                                                                                  |
+| 在错误分支直接提交                                                    | 先通过动态扫描确认该仓库的默认分支，特性另开分支                                                                    |
 
 ## Quick Reference
 
