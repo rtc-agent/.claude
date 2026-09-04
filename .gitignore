@@ -1,0 +1,23 @@
+# Whitelist mode: deny all, then allow specific files
+*
+
+# Allowed files
+!CLAUDE.md
+!README.md
+!LICENSE
+!.gitignore
+
+# Allowed directories
+!agents/
+!agents/**
+!commands/
+!commands/**
+!hooks/
+!hooks/**
+!skills/
+!skills/**
+!workflows/
+!workflows/**
+
+# Allow settings files
+!settings.json
