@@ -1,6 +1,6 @@
 ---
 name: rtc-agent-product-standards
-description: Use when implementing features for RTC-Agent — covers auth, sessions, messaging, RTC tool calls, virtual FS, script engine, work modes, skill system, realtime communication, and UI components
+description: Use when implementing features for RTC-Agent — covers auth, sessions, messaging, RTC tool calls, virtual FS, script engine, work modes, skill system, realtime communication, UI components, context management, memory system, and commands
 ---
 
 # RTC-Agent 产品需求文档
@@ -19,3 +19,6 @@ description: Use when implementing features for RTC-Agent — covers auth, sessi
 | 8 | Skill 系统 | [08-skill-system.md](./08-skill-system.md) |
 | 9 | 实时通信 | [09-realtime.md](./09-realtime.md) |
 | 10 | 前端组件架构 | [10-components.md](./10-components.md) |
+| 11 | Agent 上下文管理 | [11-context-management.md](./11-context-management.md) |
+| 12 | 记忆系统 | [12-memory-system.md](./12-memory-system.md) |
+| 13 | 命令系统 | [13-commands.md](./13-commands.md) |

@@ -64,6 +64,7 @@ description: Use when writing, reviewing, or refactoring code across any RTC Age
 | [可观测性](./golang/observability.md) | 日志、追踪、指标采集、健康检查 |
 | [代码质量](./golang/code-quality.md) | 重复代码、废弃代码、事务上下文、Redis Lua、PR 自检 |
 | [后端性能](./golang/performance.md) | 数据库优化、并发、缓存、Centrifuge、pprof |
+| [Eino TurnLoop](./golang/eino-turn-loop/README.md) | Agent 取消、多轮循环、抢占与中止机制 |
 
 ---
 
