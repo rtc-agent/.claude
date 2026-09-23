@@ -20,6 +20,8 @@
 !reviews/**
 !workflows/
 !workflows/**
+!docs-update-logs/
+!docs-update-logs/**
 
 # Allow settings files
 !settings.json
