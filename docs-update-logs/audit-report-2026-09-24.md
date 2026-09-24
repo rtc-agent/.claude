@@ -1,8 +1,8 @@
 # RTC Agent 文档审计报告
 
 **日期**: 2026-09-24
-**审计范围**: `docs/src/content/docs/` 下全部 90 篇文档（中文 45 篇 + 英文 45 篇）
-**审计方法**: 逐篇阅读文档，对比 server / web-components 代码实际实现
+**审计范围**: `docs/src/content/docs/` 下全部中文和英文文档（共 ~92 个 .md/.mdx 文件）
+**代码参照**: `server/` (Go), `web-components/` (TypeScript)
 
 ---
 
@@ -10,133 +10,138 @@
 
 | 指标 | 数值 |
 |------|------|
-| 审计文档总数 | 90 篇（zh 45 + en 45） |
-| 代码对比模块 | server (Go), web-components (TypeScript) |
+| 审计文档数 | ~92（中文 ~46 + 英文 ~46） |
+| 覆盖模块 | protocol, features, concepts, integration, deployment, architecture, operations, showcase |
+| 发现问题总数 | 5 |
 | 严重问题 | 0 |
-| 中等问题 | 1 |
+| 中等问题 | 2 |
 | 轻微问题 | 0 |
-| 建议 | 0 |
+| 建议优化 | 3 |
+| 已修正文件 | 4 |
 
-**总体评价**: 文档质量很高，与代码实现高度一致。协议文档（HTTP API、WebSocket RPC、实时事件）、组件 API 文档、配置项文档、部署文档均与代码完全匹配。唯一发现的问题是英文版 session.md 在翻译时遗漏了"重新打开会话"（Reopen）功能的描述。
+**总体评价**: 文档质量较高，协议描述、API 参考、架构说明与代码实现高度一致。中英文文档内容同步。发现的 2 个中等问题已修正。
 
 ---
 
 ## 问题清单
 
-### 中等 (1)
+### 中等问题（已修正）
 
-#### 1. 英文版 session.md 遗漏 Closed -> Idle 重新打开功能
+#### 1. `virtual-fs.md` (中/英): `write` 工具状态标注错误
 
-- **文件**: `docs/src/content/docs/en/features/session.md`
-- **问题描述**: 英文版 session.md 在翻译时遗漏了会话"重新打开"功能的描述，导致文档与实际实现不一致。具体遗漏 4 处：
-  1. 状态图中 `Closed --> [*]` 应为 `Closed --> Idle: Reopen session`
-  2. Closed 状态可执行操作遗漏 "Reopen"
-  3. 操作表缺少 "Open" 行
-  4. 实时更新事件表缺少 "Opened" 事件
-  5. 高级操作子图缺少 "Open" 节点
+- **文件**: `docs/src/content/docs/concepts/virtual-fs.md` 第 89 行
+- **英文文件**: `docs/src/content/docs/en/concepts/virtual-fs.md` 第 89 行
+- **问题描述**: 文档标注 `write` 工具为 "🔜 暂未启用"，并附警告称 "write 工具当前处于禁用状态"。但实际代码中 `write` 工具已完整实现并注册为活跃工具。
 - **代码证据**:
-  - `server/pkg/protocol/models.gen.go:165` -- `MethodSessionOpen RpcMethod = "v1.session.open"`
-  - `server/internal/handler/rpc/handler.go:75` -- `protocol.MethodSessionOpen: dispatch(h.OpenSession)`
-  - `server/pkg/protocol/models.gen.go:726` -- `OpenSessionResponse` 结构体定义
-- **修正动作**: 补齐 5 处遗漏内容，使英文版与中文版保持一致
+  - `server/internal/agent/data.go:132` — `&writeTool{base: base}` 注册在活跃工具列表中
+  - `server/internal/agent/tools.go:101-116` — `writeTool` 完整实现（Info + InvokableRun）
+  - `web-components/packages/persistence/src/tools/builtin.ts:130-151` — 前端 `WriteTool` 完整实现，支持 `overwrite` / `append` / `create-new` 三种模式
+- **修正动作**:
+  - 将 `write` 状态从 "🔜 暂未启用" 改为 "✅ 可用"
+  - 补充 `mode` 参数值 `create-new`
+  - 移除 "write 工具当前处于禁用状态" 警告
+  - 中英文文档同步修正
+
+#### 2. `work-modes.md` (中/英): 权限矩阵中 `write` 标注错误
+
+- **文件**: `docs/src/content/docs/concepts/work-modes.md` 第 43, 50, 57, 74 行
+- **英文文件**: `docs/src/content/docs/en/concepts/work-modes.md` 第 43, 50, 57, 74 行
+- **问题描述**: 权限矩阵中多处标注 "write（暂未启用）" / "write (not yet enabled)"，并在矩阵上方添加了 "write 工具当前处于禁用状态" 的警告框。与实际代码不符。
+- **代码证据**: 同上（write 工具已完整注册并活跃）
+- **修正动作**:
+  - 移除 "write 工具当前处于禁用状态" 警告框
+  - Mermaid 图中 "write（暂未启用）" → "write"
+  - 权限表格中 "write（暂未启用）" → "write"
+  - 中英文文档同步修正
+
+### 建议优化（未修正，记录备查）
+
+#### 3. 部署文档中 LLM 模型示例可能造成误解
+
+- **文件**: `getting-started.md`, `deployment/source-build.md`, `deployment/distributed-deploy.md`
+- **问题描述**: 配置示例中 `llm.model` 写为 `"claude-sonnet-4-20250514"`，但 `etc/config.docker.yaml` 的实际默认值为 `"qwen3.7-plus"`。虽然文档有括号注释 "实际默认配置可能不同（如 qwen3.7-plus）"，但示例值与实际配置不一致可能让首次部署的用户困惑。
+- **建议**: 将示例模型名改为与 `config.docker.yaml` 一致，或使用占位符 `"your-model-name"` 并附说明。
+
+#### 4. 部署文档中 `providers.mock` 配置不一致
+
+- **文件**: `deployment/distributed-deploy.md`
+- **问题描述**: 文档配置示例显示 `providers.mock.enabled: true` 和 `url: "http://mock-oauth2:10060"`，但 `etc/config.docker.yaml` 中为 `enabled: false` 和 `url: "http://192.168.31.60:20060"`。文档是作为分布式部署的覆盖配置，逻辑上合理，但应更明确说明这是覆盖值而非默认值。
+- **建议**: 在配置片段前加注释说明 "以下配置覆盖 config.docker.yaml 中的默认值"。
+
+#### 5. `concepts/rtc.md` 中 `write` 工具参数缺少 `mode`
+
+- **文件**: `docs/src/content/docs/concepts/rtc.md` 第 79 行
+- **问题描述**: RTC 内置工具表中 `write` 的关键参数只列了 `path` 和 `content`，未提及 `mode` 参数。实际实现支持 `overwrite` / `append` / `create-new` 三种写入模式。
+- **建议**: 在参数列补充 `mode`。
 
 ---
 
 ## 中英文同步状态
 
-| 文档路径 | 中文行数 | 英文行数 | 同步状态 |
-|----------|:--------:|:--------:|:--------:|
-| introduction.md | 147 | 147 | 一致 |
-| getting-started.md | 202 | 202 | 一致 |
-| resume.md | -- | -- | 仅中文 |
-| protocol/index.md | 176 | 176 | 一致 |
-| protocol/http-api.md | 358 | 358 | 一致 |
-| protocol/rpc.md | 407 | 407 | 一致 |
-| protocol/events.md | 306 | 306 | 一致 |
-| concepts/rtc.md | 215 | 215 | 一致 |
-| concepts/virtual-fs.md | 207 | 207 | 一致 |
-| concepts/script-engine.md | 254 | 254 | 一致 |
-| concepts/work-modes.md | 163 | 163 | 一致 |
-| features/session.md | 400 | 400 | **已修正** (原 397) |
-| features/messaging.md | 388 | 388 | 一致 |
-| features/skill-system.md | 310 | 310 | 一致 |
-| features/commands.md | 284 | 284 | 一致 |
-| features/memory.md | 296 | 296 | 一致 |
-| features/context-management.md | 356 | 356 | 一致 |
-| features/realtime.md | 272 | 272 | 一致 |
-| features/llm-tools.md | 421 | 421 | 一致 |
-| features/notifications.md | 337 | 337 | 一致 |
-| features/settings.md | 398 | 398 | 一致 |
-| integration/auth.md | 436 | 436 | 一致 |
-| integration/component-api.md | 683 | 683 | 一致 |
-| integration/function-registration.md | 258 | 258 | 一致 |
-| integration/scenario-authoring.md | 233 | 233 | 一致 |
-| integration/i18n.md | 350 | 350 | 一致 |
-| integration/integration-tutorial.md | 236 | 236 | 一致 |
-| integration/faq.md | 275 | 275 | 一致 |
-| deployment/source-build.md | 104 | 104 | 一致 |
-| deployment/cdn.md | 164 | 164 | 一致 |
-| deployment/distributed-deploy.md | 211 | 211 | 一致 |
-| architecture/index.md | 141 | 141 | 一致 |
-| architecture/frontend.md | 356 | 356 | 一致 |
-| architecture/backend.md | 415 | 415 | 一致 |
-| operations/* (8 篇) | -- | -- | 一致 |
-| showcase/* (3 篇) | -- | -- | 一致 |
-| legal/* (2 篇) | -- | -- | 一致 |
+| 区域 | 中文 | 英文 | 同步状态 |
+|------|:----:|:----:|:--------:|
+| About (resume) | ✅ | ✅ | 同步 |
+| Getting Started | ✅ | ✅ | 同步 |
+| Deployment (3 篇) | ✅ | ✅ | 同步 |
+| Concepts (4 篇) | ✅ | ✅ | 同步 |
+| Features (10 篇) | ✅ | ✅ | 同步 |
+| Integration (7 篇) | ✅ | ✅ | 同步 |
+| Protocol (4 篇) | ✅ | ✅ | 同步 |
+| Architecture (3 篇) | ✅ | ✅ | 同步 |
+| Operations (8 篇) | ✅ | ✅ | 同步 |
+| Showcase (3 篇) | ✅ | ✅ | 同步 |
+| Legal (2 篇) | ✅ | ✅ | 同步 |
 
----
-
-## 已验证的代码一致性
-
-### 协议层 (Protocol)
-
-| 验证项 | 文档描述 | 代码实际 | 状态 |
-|--------|---------|---------|:----:|
-| HTTP 端点 | 4 个 OAuth2 + 3 个运维 + 2 个业务 | `server/internal/handler/http/` 路由注册 | 一致 |
-| OAuth2 Token 响应 | `access_token + refresh_token + expires_in + user_id` | `OAuth2TokenExchangeResponse` 结构体 | 一致 |
-| OAuth2 Refresh 响应 | `access_token + expires_in` | `OAuth2TokenRefreshResponse` 结构体 | 一致 |
-| Healthz 响应 | `{"status": "ok"}` | `health.go:39` | 一致 |
-| Readyz 响应 | `{"status": "ready", "checks": {...}}` | `health.go:94` | 一致 |
-| RPC 方法数量 | 17 个（9 Action + 8 Query） | `handler.go:70-95` 注册 17 个路由 | 一致 |
-| RPC 方法名 | `v1.session.*`, `v1.message.*`, `v1.turn.*`, `v1.rtc.*` | `models.gen.go:154-170` | 一致 |
-| ContentType 枚举 | 9 种 | `models.gen.go:13-21` | 一致 |
-| MessageRole 枚举 | 4 种 | `models.gen.go:88-91` | 一致 |
-| 事件频道 | Topic + Live 双频道 | Centrifuge 配置 | 一致 |
-
-### 组件层 (Web Component)
-
-| 验证项 | 文档描述 | 代码实际 | 状态 |
-|--------|---------|---------|:----:|
-| 组件属性 | theme, lang, app-label, database-name, bubble-icon, scenarios-url, server-url, redirect-uri | `rtc-agent.ts:204-422` | 一致 |
-| JS 属性 | agentConfig, registry, windowConfig, activityBarConfig | `rtc-agent.ts:263-491` | 一致 |
-| 事件 | rtc-agent-ready | `rtc-agent.ts` connectedCallback | 一致 |
-| reconnect() 方法 | 存在 | `rtc-agent.ts:1030` | 一致 |
-| connectionFailed/connectionError | 存在 | `rtc-agent.ts:1043-1051` | 一致 |
-| 工作模式 | manual, edit, plan, auto, bypass | `types/index.ts:200` | 一致 |
-| CDN 版本 | @rtc-agent/component@0.2.3 | npm registry: 0.2.3 | 一致 |
-
-### 服务端 (Server)
-
-| 验证项 | 文档描述 | 代码实际 | 状态 |
-|--------|---------|---------|:----:|
-| Go 版本要求 | Go 1.27+ | `go.mod: go 1.27.0` | 一致 |
-| 配置项 | database.dsn, redis.addr, llm.provider/api_key/model 等 | `config.go` 结构体 | 一致 |
-| LLM 定价配置 | input/output/cached_read/cached_write/reasoning per million | `ModelPricingConfig` | 一致 |
-| 重试配置 | retry_max_attempts (default 0), retry_base_delay (default 1s) | `config.go:406-407` | 一致 |
-| 缓存告警阈值 | worker.cache_hit_rate_warn_threshold | `config.go:238` | 一致 |
-| LLM 内置工具 | 16 个工具（subAgent, askUser, todoWrite, goal, loop 等） | `internal/agent/tools_*.go` | 一致 |
-| Docker 端口 | 28080(Nginx), 25432(PG), 26379(Redis) 等 | `docker-compose.yml` | 一致 |
+**结论**: 中英文文档完全同步，所有中文文档都有对应的英文翻译版本。本次修正的 2 个问题已同步修正中英文版本。
 
 ---
 
 ## 已修正内容汇总
 
-### `docs/src/content/docs/en/features/session.md`
+| 文件 | 修改点 |
+|------|--------|
+| `docs/src/content/docs/concepts/virtual-fs.md` | `write` 工具状态改为 "可用"；补充 `mode` 参数值；移除禁用警告 |
+| `docs/src/content/docs/en/concepts/virtual-fs.md` | 同上（英文版） |
+| `docs/src/content/docs/concepts/work-modes.md` | 移除 `write` 禁用警告框；Mermaid 图和表格中移除 "暂未启用" 标注 |
+| `docs/src/content/docs/en/concepts/work-modes.md` | 同上（英文版） |
 
-| 行号 | 修正前 | 修正后 |
-|------|--------|--------|
-| 22 | `Closed --> [*]` | `Closed --> Idle: Reopen session` |
-| 37 | `Closed, no further writes allowed \| View history, Fork` | `Closed (archived), can view history or reopen \| View history, Fork, Reopen` |
-| 54-57 | Advanced 子图只有 Fork + Close | 新增 `A3["🔓 Open<br/>Restore closed session"]` |
-| 71 | 操作表到 Close 结束 | 新增 `Open` 行：Restore a Closed session back to Idle |
-| 200-204 | 实时更新事件表只有 Created/Updated/Closed | 新增 `Opened` 事件行 |
+---
+
+## 审计方法
+
+1. 解析 `astro.config.mjs` 获取完整文档目录树（sidebar 配置）
+2. 逐一读取所有中文和英文文档文件
+3. 根据文档内容动态调研代码模块：
+   - HTTP API 端点 → `server/internal/handler/http/` (oauth2.go, health.go, interrupt.go, memories.go)
+   - WebSocket RPC 方法 → `server/internal/handler/rpc/` (handler.go, action.*, query.*)
+   - RPC 方法枚举 → `server/pkg/protocol/models.gen.go`
+   - OAuth2 协议模型 → `server/pkg/protocol/models.gen.go` (OAuth2TokenExchangeResponse 等)
+   - LLM 内置工具 → `server/internal/agent/tools_*.go`, `server/internal/agent/data.go`
+   - 前端内置工具 → `web-components/packages/persistence/src/tools/builtin.ts`
+   - Web Component 属性 → `web-components/packages/component/src/components/rtc-agent/rtc-agent.ts`
+   - 工作模式 → `web-components/packages/component/src/contexts/mode.ts`
+   - 服务端配置 → `server/internal/infra/config/config.go`, `server/etc/config.docker.yaml`
+   - Docker 部署 → `server/docker-compose.yml`
+   - npm 包版本 → `npm view @rtc-agent/component version`
+4. 逐项对比文档与代码的一致性
+5. 检查中英文文档同步状态
+
+## 验证正确的关键文档内容
+
+以下内容经代码验证确认准确：
+
+- **HTTP API**: 4 个 OAuth2 端点、3 个运维端点、2 个业务端点 — 与 `server/internal/handler/http/` 完全一致
+- **WebSocket RPC**: 17 个方法（9 Action + 8 Query），4 个业务域 — 与 `server/pkg/protocol/models.gen.go` 枚举完全一致
+- **实时事件**: Topic/Live 双频道、事件分布表、Update 模型 — 与代码实现一致
+- **OAuth2 响应格式**: access_token, refresh_token, expires_in, user_id — 与 `OAuth2TokenExchangeResponse` 结构一致
+- **错误格式**: code, message, details — 与 `APIError` 结构一致
+- **ContentType 枚举**: 9 种类型 — 与代码一致
+- **MessageRole 枚举**: 4 种角色 — 与代码一致
+- **Component 属性**: theme, lang, database-name, app-label, server-url, redirect-uri, scenarios-url, bubble-icon — 与 `rtc-agent.ts` 完全一致
+- **JS 属性**: agentConfig, registry, windowConfig, activityBarConfig — 与代码一致
+- **npm CDN 版本**: `@0.2.3` — 与 npm 发布版本一致
+- **LLM 内置工具**: subAgent, listSubAgent, getSubAgentMessage, stopSubAgent, sendMessageToSubAgent, askUser, todoWrite, createGoal, completeGoal, cancelGoal, createLoop, cancelLoop, completeLoop, listLoops, pauseLoop, resumeLoop, saveSessionMemory, listSessionMemories, searchMemory, saveUserMemory, updateUserMemory, deleteUserMemory, listUserMemory — 全部在代码中验证存在
+- **RTC 内置工具**: ls, read, write, edit, grep, find, script, askUser — 全部在代码中验证存在
+- **Docker 端口映射**: 25432, 26379, 26686, 24317, 29090, 23100, 24040, 23001, 29093, 20060, 28080 — 与 docker-compose.yml 一致
+- **Go 版本**: 1.27+ — 与 go.mod `go 1.27.0` 一致
+- **配置默认值**: `llm.retry_max_attempts` 默认 0, `llm.retry_base_delay` 默认 1s — 与 config.go SetDefault 一致
