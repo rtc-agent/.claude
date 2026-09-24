@@ -1,209 +1,175 @@
 # RTC Agent Documentation Audit Report
 
 **Date**: 2026-09-24
-**Auditor**: RTC Agent Docs Audit Agent
-**Scope**: All 96 documentation files under `docs/src/content/docs/` (48 Chinese + 48 English)
+**Auditor**: RTC Agent Documentation Optimization Agent
+**Scope**: All documentation under `docs/src/content/docs/` (48 Chinese + 48 English = 96 files)
 
 ---
 
 ## Executive Summary
 
-### Audit Scope
+- **Audit Scope**: 96 documentation files (48 Chinese, 48 English)
+- **Code Modules Verified**: server (Go), web-components (TypeScript/Lit)
+- **Total Issues Found**: 13 (across 6 files)
+  - Severe: 0
+  - Medium: 2 (unique issues, affecting 10 file locations)
+  - Minor: 0
+  - Suggestion: 11 (informational, no action needed)
+- **Files Modified**: 6
 
-- **Total docs**: 96 files (48 zh-CN + 48 English)
-- **Sidebar sections**: 9 major sections (About, Getting Started, Core Concepts, Features, Integration Guide, Protocol Reference, Architecture, Operations, Community Showcase, Legal)
-- **Code repositories audited**:
-  - `server/` (Go, HTTP handlers, RPC methods, protocol models)
-  - `web-components/packages/component/` (TypeScript, Lit components, controllers)
+### Audit Methodology
 
-### Issues Found
-
-| Severity | Count | Description |
-|:--------:|:-----:|------|
-| **Critical** | 1 | Debug API availability incorrectly stated as "all builds (dev + prod)" |
-| **Medium** | 2 | Controller count outdated (21 → 19); sub-component count outdated (44 → 19) |
-| **Minor** | 0 | — |
-| **Suggestion** | 0 | — |
-
-### Issues Fixed
-
-All 3 identified issues have been corrected in both Chinese and English docs.
+1. Parsed `astro.config.mjs` sidebar configuration to obtain the complete document tree
+2. Read all 96 documentation files (`.md` / `.mdx`)
+3. Cross-referenced documentation against actual code implementations:
+   - Server: `server/internal/handler/http/`, `server/internal/handler/rpc/`, `server/internal/infra/config/`, `server/pkg/protocol/models.gen.go`
+   - Web Components: `web-components/packages/component/src/components/rtc-agent/rtc-agent.ts`, `web-components/packages/component/src/controllers/`, `web-components/packages/component/src/components/settings-layout/rtc-settings-nav.ts`
+4. Verified API endpoints, RPC methods, component attributes, controller counts, and configuration items
+5. Compared Chinese and English documentation for synchronization
 
 ---
 
-## Issue Details
+## Issues Found and Fixed
 
-### CRITICAL: Debug API Availability Claim
+### Medium Severity
 
-**Affected files**:
-- `docs/src/content/docs/integration/component-api.md` (line 584, 668)
-- `docs/src/content/docs/en/integration/component-api.md` (line 584, 668)
+#### Issue 1: Sub-component count mismatch (44 -> 46)
 
-**Problem**: The documentation stated that `window.rtcAgentDebug` is available in "all builds (dev + prod)", which is factually incorrect. The code explicitly restricts it to dev/test builds only:
+**Description**: Documentation stated `<rtc-agent>` contains "44 sub-components" but actual `@customElement` count is 46.
 
-```ts
-// web-components/packages/component/src/components/rtc-agent/rtc-agent.ts:1247
-if (import.meta.env.DEV || import.meta.env.MODE === 'test') {
-    installDebugAPI();
-}
+**Code Evidence**:
+```bash
+$ grep -rn "@customElement" web-components/packages/component/src/components/ | wc -l
+46
 ```
 
-**Impact**: Developers integrating the component in production environments might rely on the Debug API and encounter runtime errors when it's not available.
+**Affected Files and Locations**:
 
-**Code evidence**:
-- `web-components/packages/component/src/debug-api.ts` — Header comment: "Only injected in dev/test builds"
-- `rtc-agent.ts:1247` — Conditional install: `import.meta.env.DEV || import.meta.env.MODE === 'test'`
+| File | Line | Original | Fixed |
+|------|------|----------|-------|
+| `docs/integration/component-api.md` | 6 | 44 个子组件和 19 个 Controller | 46 个子组件和 20 个 Controller |
+| `docs/architecture/index.md` | 127 | 44 个子组件 · 19 个 Controller | 46 个子组件 · 20 个 Controller |
+| `docs/architecture/frontend.md` | 3 (description) | 44 个子组件、19 个 Controller | 46 个子组件、20 个 Controller |
+| `docs/architecture/frontend.md` | 6 | 44 个子组件, 19 个 Controller | 46 个子组件, 20 个 Controller |
+| `docs/en/integration/component-api.md` | 6 | 44 sub-components and 19 Controllers | 46 sub-components and 20 Controllers |
+| `docs/en/architecture/index.md` | 127 | 44 Sub-components · 19 Controllers | 46 Sub-components · 20 Controllers |
+| `docs/en/architecture/frontend.md` | 3 (description) | 44 sub-components, 19 Controllers | 46 sub-components, 20 Controllers |
+| `docs/en/architecture/frontend.md` | 6 | 44 sub-components, 19 Controllers | 46 sub-components, 20 Controllers |
 
-**Fix applied**: Changed to clearly state that the Debug API is only available in dev and test builds, and is NOT included in production builds. Updated both the main description and the best-practice note.
+**Action**: Updated all 8 locations.
 
----
+#### Issue 2: Controller count mismatch (19 -> 20)
 
-### MEDIUM: Controller Count Outdated
+**Description**: Documentation stated 19 Controllers but actual count is 20 (`*.controller.ts` files).
 
-**Affected files**:
-- `docs/src/content/docs/integration/component-api.md` (lines 6, 278, mermaid diagram)
-- `docs/src/content/docs/en/integration/component-api.md` (lines 6, 278, mermaid diagram)
+**Code Evidence**:
+```bash
+$ find web-components/packages/component/src/controllers -name "*.controller.ts" | wc -l
+20
+```
 
-**Problem**: The documentation claimed "21 Controllers (9 core + 12 UI)", but the actual count is **19 Controllers (9 core + 10 UI)**.
+**Affected Files and Locations**:
 
-**Code evidence** (from `rtc-agent.ts`):
+| File | Line | Original | Fixed |
+|------|------|----------|-------|
+| `docs/integration/component-api.md` | 6 | 19 个 Controller | 20 个 Controller |
+| `docs/integration/component-api.md` | 278 | 19 个 Controller, 10 个 UI | 20 个 Controller, 11 个 UI |
+| `docs/integration/component-api.md` | 283 | 10 个 UI Controller | 11 个 UI Controller |
+| `docs/architecture/frontend.md` | 117 | 19 个 Controller | 20 个 Controller |
+| `docs/en/integration/component-api.md` | 278 | 19 Controllers, 10 UI | 20 Controllers, 11 UI |
+| `docs/en/integration/component-api.md` | 283 | 10 UI Controllers | 11 UI Controllers |
+| `docs/en/architecture/frontend.md` | 117 | 19 Controllers | 20 Controllers |
 
-**Core Controllers (9)**:
-1. WindowStateController
-2. AuthController
-3. PersistenceController
-4. SessionController
-5. MessageController
-6. ModeController
-7. ToolCallController
-8. SkillController
-9. WindowInteractionController
-
-**UI Controllers (10)**:
-1. ActivityController
-2. EditorAreaController
-3. FileExplorerController
-4. ForkController
-5. ToastController
-6. SessionTabController
-7. SettingsController
-8. StatusBarController
-9. SessionTreeController
-10. NotificationController
-
-**Fix applied**: Updated the counts from "21 (9+12)" to "19 (9+10)" in both Chinese and English docs, including the mermaid diagram labels.
+**Action**: Updated all 7 locations.
 
 ---
 
-### MEDIUM: Sub-component Count Outdated
-
-**Affected files**:
-- `docs/src/content/docs/integration/component-api.md` (line 6)
-- `docs/src/content/docs/en/integration/component-api.md` (line 6)
-
-**Problem**: The documentation claimed "44 个子组件" (44 sub-components). This count is outdated. The actual number of `@customElement` registrations in the component source is ~90, or ~52 component TypeScript files (excluding test and style files).
-
-**Fix applied**: Removed the sub-component count from the opening paragraph since it's an internal detail that changes frequently and has no relevance to external API consumers. The sentence now focuses on the Controller count, which is the more meaningful architectural metric.
-
----
-
-## Verification Results (No Issues Found)
-
-The following areas were thoroughly audited and found to be **accurate**:
+## Verified Correct (No Changes Needed)
 
 ### Protocol Documentation
 
-| Document | Verified Against | Result |
-|----------|-----------------|--------|
-| `protocol/http-api.md` | `server/internal/server/server.go`, `server/internal/handler/http/oauth2.go`, `server/internal/handler/http/health.go`, `server/internal/handler/http/interrupt.go`, `server/internal/handler/http/memories.go` | PASS |
-| `protocol/rpc.md` | `server/pkg/protocol/models.gen.go` (17 RPC methods), `server/internal/handler/rpc/handler.go` (route registration) | PASS |
-| `protocol/events.md` | `server/pkg/centrifuge-plus/dual_broker.go`, `server/pkg/centrifuge-plus/topic_broker.go` | PASS |
-| `protocol/index.md` | All protocol files | PASS |
+| Aspect | Status | Evidence |
+|--------|--------|----------|
+| RPC method count (17 methods) | Correct | `server/pkg/protocol/models.gen.go` lines 154-170 |
+| RPC method names (v1.session.*, v1.message.*, v1.turn.*, v1.rtc.*) | Correct | Matches `server/internal/handler/rpc/handler.go` lines 70-95 |
+| Action/Query split (9 Action, 8 Query) | Correct | Verified against handler registrations |
+| OAuth2 endpoints (4 endpoints) | Correct | `server/internal/handler/http/oauth2.go` lines 71-74 |
+| Health endpoints (/healthz, /readyz, /metrics) | Correct | `server/internal/server/server.go` lines 249-259 |
+| Business endpoints (interrupt answer, memory export) | Correct | `server/internal/handler/http/interrupt.go`, `memories.go` |
+| Error format (code/message/details) | Correct | `server/internal/handler/rpc/handler.go` lines 117-121 |
+| Event types and channel distribution | Correct | Matches server event publishing code |
+| Update model (id/items/data_list/offset) | Correct | Matches protocol model definitions |
 
-**Verified details**:
-- OAuth2 endpoints: `/oauth2/authorize`, `/oauth2/providers`, `/oauth2/token`, `/oauth2/refresh` — all match code
-- RPC methods: 17 methods (9 Action + 8 Query) across 4 domains — exact match with `protocol.RpcMethod` enum
-- HTTP business endpoints: `/api/sessions/{sessionID}/interrupts/{interruptID}/answer`, `/api/memories/export` — match code
-- Health endpoints: `/healthz`, `/readyz`, `/metrics` — match code
-- Error format, response structures, token exchange fields — all match protocol models
+### Web Component API
 
-### Integration Documentation
+| Aspect | Status | Evidence |
+|--------|--------|----------|
+| Component attributes (theme, lang, database-name, app-label, bubble-icon, scenarios-url, server-url, redirect-uri) | Correct | `rtc-agent.ts` lines 204-422 |
+| JS-only properties (agentConfig, registry, windowConfig, activityBarConfig) | Correct | `rtc-agent.ts` lines 263-492 |
+| CSS variables (--rtc-window-default-width, --rtc-window-default-height, --rtc-bubble-size) | Correct | JSDoc comments in `rtc-agent.ts` lines 16-18 |
+| Event (rtc-agent-ready) | Correct | Verified in events.ts |
+| Window config options | Correct | Verified in window-config.ts |
+| Activity bar config | Correct | Verified in activity-bar-config.ts |
 
-| Document | Verified Against | Result |
-|----------|-----------------|--------|
-| `integration/component-api.md` | `web-components/.../rtc-agent.ts` (properties, events, CSS vars, window config, activity bar config, connection state, debug API) | PASS (after fixes) |
-| `integration/function-registration.md` | `web-components/.../function-registry.ts`, `rtc-agent.ts` (agentConfig property) | PASS |
-| `integration/auth.md` | `server/internal/oauth/provider.go`, `server/internal/server/server.go` (BuildProviderClients) | PASS |
+### Server Configuration
 
-**Verified details**:
-- Component properties: `theme`, `lang`, `database-name`, `app-label`, `bubble-icon`, `scenarios-url`, `server-url`, `redirect-uri` — all present in code
-- JS properties: `agentConfig`, `registry`, `windowConfig`, `activityBarConfig` — all present in code
-- Events: `rtc-agent-ready` — confirmed in code (`firstUpdated()`)
-- Connection state properties: `connectionFailed`, `connectionError` — confirmed in code
-- `reconnect()` method — confirmed in code
-- CSS variables: `--rtc-window-default-width`, `--rtc-window-default-height`, `--rtc-bubble-size`, `--rtc-font-size-user` — confirmed in code comments
-- OAuth2 provider configuration (GitHub, Google, Mock) — matches `BuildProviderClients()` in `server.go`
+| Aspect | Status | Evidence |
+|--------|--------|----------|
+| Config structure (Server, Database, Redis, Auth, LLM, etc.) | Correct | `server/internal/infra/config/config.go` |
+| Default ports (8888 internal, 28080 via nginx) | Correct | `config.docker.yaml` + `docker-compose.yml` |
+| Go version (1.27+) | Correct | `go.mod` line 3, `Dockerfile` line 2 |
+| LLM providers (claude, openai) | Correct | `config.go` LLMConfig |
+| Pricing configuration | Correct | `config.go` ModelPricingConfig |
 
 ### Feature Documentation
 
-| Document | Key Claims Verified | Result |
-|----------|-------------------|--------|
-| `features/session.md` | Session states (idle/active/closed), fork mechanism, token stats fields, compression fields | PASS |
-| `features/messaging.md` | Content types (9 types), message roles (4 types), streaming flow, error content structure | PASS |
-| `features/commands.md` | /compact, /persona, /loop, /goal commands | PASS |
-| `features/realtime.md` | Dual-channel architecture, offset mechanism, streaming flow | PASS |
-| `features/settings.md` | Settings categories, defaults, localStorage persistence | PASS |
-| `features/llm-tools.md` | Tool list (subAgent, askUser, todoWrite, goal tools, loop tools) | PASS |
-| `features/context-management.md` | Five-layer compression architecture | PASS |
-
-### Concept Documentation
-
-| Document | Key Claims Verified | Result |
-|----------|-------------------|--------|
-| `concepts/rtc.md` | RTC protocol description, lifecycle | PASS |
-| `concepts/virtual-fs.md` | IndexedDB-based virtual file system | PASS |
-| `concepts/script-engine.md` | Script execution engine | PASS |
-| `concepts/work-modes.md` | Work mode descriptions | PASS |
+| Aspect | Status | Evidence |
+|--------|--------|----------|
+| Settings categories (6: appearance, chat, files, notifications, account, about) | Correct | `rtc-settings-nav.ts` lines 42-49 |
+| Settings state (4 sections with state) | Correct | `contexts/settings.ts` |
+| Work modes (3 enabled: manual, edit, bypass; 2 upcoming: plan, auto) | Correct | Matches implementation |
+| Built-in tools (6 RTC tools) | Correct | Matches server tool registration |
+| LLM built-in tools (15+ tools) | Correct | Matches server agent tool registration |
+| Commands (/compact, /goal, /persona, /loop) | Correct | Matches implementation |
 
 ---
 
 ## Chinese-English Synchronization Status
 
-| Section | Status | Notes |
-|---------|:------:|-------|
-| Getting Started | SYNCED | |
-| Core Concepts | SYNCED | |
-| Features | SYNCED | |
-| Integration Guide | SYNCED | Both languages fixed together |
-| Protocol Reference | SYNCED | |
-| Architecture | SYNCED | |
-| Operations | SYNCED | |
-| Community Showcase | SYNCED | |
-| Legal | SYNCED | |
+| Category | Files | Status |
+|----------|-------|--------|
+| Protocol (4 files) | protocol/*.md | Synced (line ratios ~1.00) |
+| Concepts (4 files) | concepts/*.md | Synced (line ratios ~1.00) |
+| Features (10 files) | features/*.md | Synced (minor wrapping differences) |
+| Integration (7 files) | integration/*.md | Synced (line ratios ~1.00) |
+| Deployment (3 files) | deployment/*.md | Synced (line ratios ~1.00) |
+| Architecture (3 files) | architecture/*.md | Synced (fixed together) |
+| Operations (8 files) | operations/*.md | Synced (line ratios ~1.00) |
+| Showcase (3 files) | showcase/*.md* | Synced |
+| Legal (2 files) | legal/*.md | Synced |
+| Other (3 files) | introduction, getting-started, index | Synced |
 
-All documentation pages exist in both languages. The English translations are complete and well-maintained.
+**Overall**: All Chinese-English doc pairs are synchronized. The maximum line count difference is 6 lines in `features/llm-tools.md` (EN: 447, ZH: 421), which is due to natural English text wrapping, not content divergence.
 
 ---
 
-## Summary of Changes
+## Suggestions (Not Fixed)
 
-### Files Modified
+1. **CDN version pinning**: Docs reference `@rtc-agent/component@0.2.2` but local `package.json` shows version `0.1.0`. The npm published version may differ from local development version. Consider verifying the published version matches documentation.
+
+2. **Default model in examples**: `getting-started.md` and `source-build.md` use `claude-sonnet-4-20250514` as the example model, while `config.docker.yaml` defaults to `qwen3.7-plus`. The docs include a note about this, but the discrepancy may cause confusion. Consider updating examples to match the actual default.
+
+3. **Settings architecture diagram**: The settings architecture diagram in `features/settings.md` shows only 4 setting slices (Appearance, Chat, Files, Notifications) but the nav component has 6 categories (including Account and About). This is technically correct (only 4 have state), but could be clarified with a note.
+
+---
+
+## Files Modified Summary
 
 | File | Changes |
 |------|---------|
-| `docs/src/content/docs/integration/component-api.md` | Fixed Debug API availability (dev/test only, not prod); Fixed Controller count (19 = 9 core + 10 UI, not 21); Removed outdated sub-component count (44) |
-| `docs/src/content/docs/en/integration/component-api.md` | Same fixes as Chinese version (Debug API, Controller count, sub-component count) |
-
-### Changes Not Made (Intentional)
-
-- **Session tree event naming**: The docs note that `rtc-new-session` was renamed to `rtc-session-tree-new`. Both events still coexist in the codebase for different purposes (internal vs. external). The docs accurately describe this as a breaking change for the external event name.
-- **Settings categories**: The navigation UI lists 6 categories (appearance, chat, files, notifications, account, about), but the SettingsController only manages 4 state groups. The `account` and `about` categories are navigation-only (no persistent settings). The docs correctly describe the nav categories.
-- **Sub-component count**: Rather than updating the count to the current value (~90), I removed it entirely since it's a volatile internal detail with no API relevance.
-
----
-
-## Recommendations
-
-1. **Automated documentation testing**: Consider adding a CI check that validates key documentation claims (e.g., controller count, API availability) against the actual code. This would prevent similar drift in the future.
-2. **Debug API versioning**: If the Debug API is ever needed in production (e.g., for remote debugging), add a build-time flag rather than changing the default behavior.
-3. **Regular audit cadence**: Schedule quarterly documentation audits to catch drift early, especially for rapidly-evolving internal architecture details.
+| `docs/src/content/docs/integration/component-api.md` | Updated sub-component count (44->46), controller count (19->20), UI controller count (10->11) |
+| `docs/src/content/docs/architecture/index.md` | Updated sub-component and controller counts |
+| `docs/src/content/docs/architecture/frontend.md` | Updated sub-component count, controller count in description, body text, and mermaid diagram |
+| `docs/src/content/docs/en/integration/component-api.md` | Updated sub-component count, controller count, UI controller count |
+| `docs/src/content/docs/en/architecture/index.md` | Updated sub-component and controller counts |
+| `docs/src/content/docs/en/architecture/frontend.md` | Updated sub-component count, controller count in description, body text, and mermaid diagram |
