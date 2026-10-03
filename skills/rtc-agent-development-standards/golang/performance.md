@@ -161,6 +161,45 @@ func (s *Service) GetUser(ctx context.Context, id string) (*User, error) {
 - **TTL 兜底**：所有缓存必须设置过期时间
 - **缓存穿透**：空值也缓存（短 TTL），防止恶意请求
 
+### Singleflight 防止缓存击穿
+
+高并发场景下，缓存 miss 可能导致大量并发请求同时穿透到后端。使用 `golang.org/x/sync/singleflight` 合并并发请求，只让一个请求真正执行查询。
+
+```go
+import "golang.org/x/sync/singleflight"
+
+type Service struct {
+    credFlight singleflight.Group
+}
+
+// ✅ singleflight 合并并发请求
+func (s *Service) GetCredential(ctx context.Context, key string) (*Credential, error) {
+    // 先查缓存
+    if cached, err := s.cache.Get(key); err == nil {
+        return cached, nil
+    }
+
+    // DoChan：并发请求合并为一个，其他请求等待结果
+    ch := s.credFlight.DoChan(key, func() (interface{}, error) {
+        // 使用 Background context：查询独立于任何请求的生命周期
+        return s.repo.GetByAccessKeyID(context.Background(), key)
+    })
+
+    select {
+    case <-ctx.Done():
+        return nil, ctx.Err()  // 这个请求放弃了，但查询继续为其他请求服务
+    case r := <-ch:
+        return r.Val.(*Credential), r.Err
+    }
+}
+```
+
+**要点**：
+
+- 用 `DoChan`（非 `Do`）+ `select` 让每个调用方可独立响应自己的 context 取消
+- flight 函数内使用 `context.Background()`，防止某个调用方的取消影响共享查询
+- 适用于高并发的缓存 miss 场景（如凭证查询、配置加载）
+
 ### Lua 脚本原子性
 
 涉及多个 Redis 操作必须用 Lua 脚本（参见代码质量规范）。
@@ -262,6 +301,134 @@ for _, s := range parts {
 result := builder.String()
 ```
 
+### 防御性 I/O 限制
+
+从外部来源（文件、网络、用户上传）读取数据时，必须限制读取大小防止 OOM。对于可能超限的数据，实现多级降级管道。
+
+```go
+// ✅ 限制读取大小 + 多级降级
+const (
+    MaxImageReadSize   = 20 * 1024 * 1024  // 20MB 硬上限
+    TargetImageSize    = 3.75 * 1024 * 1024 // 目标大小（base64 后 5MB）
+    MaxImageWidth      = 2000
+    MaxImageHeight     = 2000
+)
+
+func LoadImageFromOSS(ctx context.Context, backend Backend, key string) ([]byte, error) {
+    // 1. 限制读取大小，防止 OOM
+    reader, _, err := backend.GetObject(ctx, bucket, key)
+    if err != nil { return nil, err }
+    defer reader.Close()
+    
+    limited := io.LimitReader(reader, MaxImageReadSize+1)
+    data, err := io.ReadAll(limited)
+    if err != nil { return nil, err }
+    if int64(len(data)) > MaxImageReadSize {
+        return nil, fmt.Errorf("image exceeds maximum read size (%d MB)", MaxImageReadSize/(1024*1024))
+    }
+    
+    // 2. 快速路径：已满足要求
+    if len(data) <= TargetImageSize && fitsWithin(data, MaxImageWidth, MaxImageHeight) {
+        return data, nil
+    }
+    
+    // 3. 多级降级：逐步降低质量直到满足目标
+    qualities := []int{80, 60, 40, 20}
+    for _, q := range qualities {
+        compressed := compressImage(data, q)
+        if len(compressed) <= TargetImageSize {
+            return compressed, nil
+        }
+    }
+    
+    // 4. 最终兜底：缩略图
+    return createThumbnail(data, 400, 400, 20)
+}
+
+// ❌ 不限制读取大小
+data, err := io.ReadAll(reader)  // 恶意上传 1GB 文件导致 OOM
+```
+
+**约束**：
+
+- 所有从外部读取的操作必须使用 `io.LimitReader` 或等效限制
+- 限制值通过常量定义，不硬编码在逻辑中
+- 对于需要降级的场景，实现多级管道（质量递减、尺寸递减）
+- 每级降级后检查是否满足目标，避免过度处理
+- 最终兜底方案必须存在（如缩略图、截断）
+- 截断文本时必须保证 UTF-8 字符边界完整（见下方）
+
+**UTF-8 安全截断**：截断文本内容时，不能直接在字节边界切割——中文、emoji 等多字节字符会被截断成乱码。必须向后扫描找到合法的 rune 起始位置。
+
+```go
+// ✅ UTF-8 安全截断
+func truncateUTF8(content string, maxBytes int, suffix string) string {
+    if len(content) <= maxBytes {
+        return content
+    }
+    cutPoint := maxBytes
+    for cutPoint > 0 && !utf8.RuneStart(content[cutPoint]) {
+        cutPoint--  // 回退到合法的 rune 起始位置
+    }
+    return content[:cutPoint] + suffix
+}
+
+// ❌ 直接字节截断，可能切断多字节字符
+content = content[:maxBytes]  // 中文/emoji 可能变成乱码
+```
+
+**约束**：所有对文本内容的截断操作（日志截断、消息截断、文件预览截断）必须使用 `utf8.RuneStart` 回退扫描。
+
+**适用场景**：文件上传处理、图片/视频预处理、大文本文件读取、任何处理不可信大小外部数据的场景。
+
+### 并行 I/O 加载
+
+当需要加载多个独立的外部资源（如多个文件附件）时，使用 `sync.WaitGroup` + 按索引结果数组并行加载，而非逐个串行。单个加载失败不阻塞其他加载。
+
+```go
+// ✅ 并行加载 + 按索引收集结果
+type loadResult struct {
+    data []byte
+    mime string
+    err  error
+}
+
+func loadFilesParallel(ctx context.Context, files []File) []loadResult {
+    results := make([]loadResult, len(files))
+    var wg sync.WaitGroup
+    for i, f := range files {
+        wg.Add(1)
+        go func(idx int, file File) {
+            defer wg.Done()
+            defer func() {
+                if r := recover(); r != nil {
+                    results[idx] = loadResult{err: fmt.Errorf("panic: %v", r)}
+                }
+            }()
+            data, mime, err := LoadFromOSS(ctx, file.Key)
+            results[idx] = loadResult{data: data, mime: mime, err: err}
+        }(i, f)
+    }
+    wg.Wait()
+    return results
+}
+
+// ❌ 串行加载：N 个文件 = N 次网络延迟
+for _, f := range files {
+    data, err := LoadFromOSS(ctx, f.Key)  // 每个等待 100ms → 总共 100*N ms
+}
+```
+
+**约束**：
+
+- 使用 `WaitGroup`（非 `errgroup`）：单个失败不应取消其余加载（参见 [并发规范 - errgroup vs WaitGroup](./concurrency.md#何时选择-errgroup-vs-waitgroup)）
+- 按索引写入 `results` 数组，不对共享 slice 做 `append`，避免竞态
+- 每个 goroutine 必须有 `defer recover()` 拦截 panic（参见 [并发规范 - goroutine panic 拦截](./concurrency.md#2-goroutine-panic-拦截)）
+- 后台 worker 中执行时，UserID 必须通过 context 传递（参见 [并发规范 - 后台 goroutine 必须传递身份](./concurrency.md#后台-goroutine-必须显式传递身份)）
+- 在函数注释中说明并发安全假设（哪些操作是无状态的、哪些共享变量受保护）
+
+**适用场景**：LLM 消息附件加载、批量文件下载、并行 API 调用。判断标准：多个独立的外部 I/O 操作，单个失败不应阻塞其余。
+
 ---
 
 ## 6. 性能指标
@@ -329,7 +496,7 @@ go test -bench=BenchmarkProcessOrder -benchmem ./...
 - [ ] 批量操作替代逐条
 - [ ] goroutine 有退出机制
 - [ ] channel 有合理缓冲
-- - [ ] Redis 缓存有 TTL
+- [ ] Redis 缓存有 TTL
 - [ ] 字符串拼接用 `strings.Builder`
 - [ ] 大 slice 预分配容量
 - [ ] 关键路径有基准测试

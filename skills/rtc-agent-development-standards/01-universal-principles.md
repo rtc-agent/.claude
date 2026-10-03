@@ -253,7 +253,7 @@ func process(user *User) error {
 
 ### 参数控制
 
-- 参数不超过 3 个。超过时，用 struct 封装
+- 参数不超过 3 个（Go 中 `ctx context.Context` 不计入）。超过时，用 struct 封装
 - 避免布尔参数——它意味着一个函数在做两件事
 - 避免 nil 参数——用 optional 模式或零值替代
 
@@ -261,8 +261,11 @@ func process(user *User) error {
 // ❌ 布尔参数
 func GetUser(id string, withProfile bool) (*User, error)
 
-// ✅ 选项模式
+// ✅ 选项模式（ctx 不计入参数数量）
 func GetUser(ctx context.Context, id string, opts ...UserOption) (*User, error)
+
+// ✅ ctx + 3 个有意义的参数，共 4 个参数，合规
+func LoadImageFromOSS(ctx context.Context, backend rtcoss3.Backend, bucket, key string) ([]byte, string, error)
 ```
 
 ### 纯函数优先

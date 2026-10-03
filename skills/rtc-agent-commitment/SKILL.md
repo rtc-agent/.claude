@@ -41,7 +41,7 @@ done
 - `server/` — Go 后端，默认分支 `dev`，pre-commit 包含 `golangci-lint`
 - `web-components/` — TypeScript pnpm monorepo，默认分支 `dev`，pre-commit 包含 `pnpm typecheck`
 - `docs/` — OpenAPI 文档，默认分支 `main`
-- `mermaid-live-editor/` — JavaScript，默认分支 `rtc-agent`
+- `mermaid-live-editor/` — JavaScript，默认分支 `master`
 - `.claude/` — Claude Code 配置，默认分支 `main`
 
 ## When to Use

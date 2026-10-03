@@ -101,6 +101,37 @@ function isChatMessage(value: unknown): value is ChatMessage {
 - 修改相关代码时，顺手收窄类型
 - PR review 时，新增的 `any` 必须要求修改
 
+### `as unknown as` 双重转型同样禁止
+
+`as unknown as X` 绕过类型检查的能力与 `as any` 相当。新增代码不得使用双重转型调用其他组件的公开方法——正确做法是补全目标组件的类型定义。
+
+```typescript
+// ❌ 双重转型：绕过类型安全调用兄弟组件方法
+const inputArea = this._getInputArea(el)
+(inputArea as unknown as { retryUpload: (id: string) => void }).retryUpload(fileId)
+
+// ✅ 补全类型：通过共享接口或导出类型定义
+interface InputAreaAPI {
+  retryUpload(taskId: string): void
+  removeFile(file: FileAttachment, index: number): void
+}
+
+const inputArea = this._getInputArea(el) as InputAreaAPI | null
+inputArea?.retryUpload(fileId)
+
+// ✅ 更好的做法：组件类自身导出完整类型
+// rtc-input-area.ts
+export class RTCInputArea extends LitElement {
+  public retryUpload(taskId: string): void { ... }  // 公开方法自动包含在类型中
+}
+
+// rtc-chat-layout.ts — 通过 getElement 获取完整类型
+const inputArea = this.shadowRoot!.querySelector('rtc-input-area')
+inputArea?.retryUpload(fileId)  // 类型完整，无需转型
+```
+
+**例外**：测试代码中对私有字段的 mock 注入允许使用 `as unknown as`，因为测试需要替换内部实现细节。生产代码中不存在例外。
+
 ### `unknown` 而非 `any`
 
 当类型不确定时，用 `unknown` 替代 `any`。`unknown` 强制你在使用前做类型检查。

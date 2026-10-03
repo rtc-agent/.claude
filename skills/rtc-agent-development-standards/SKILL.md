@@ -43,7 +43,7 @@ description: Use when writing, reviewing, or refactoring code across any RTC Age
 |------|------|
 | [通用原则](./01-universal-principles.md) | 命名、注释、DRY/KISS/SOLID、代码组织 |
 | [Git 工作流](../rtc-agent-commitment/SKILL.md) | 提交信息格式、分支策略、PR 流程、版本发布（独立 skill） |
-| [测试规范](./02-testing-standards.md) | 测试金字塔、覆盖率目标、测试命名与组织 |
+| [测试规范](./02-testing-standards.md) | 测试金字塔、覆盖率目标、性能测试阈值、测试命名与组织 |
 | [文档规范](./03-documentation-standards.md) | README、内联注释、变更日志、架构决策记录 |
 | [API 文档规范](./04-api-documentation.md) | OpenAPI 3.1 编写规范、示例设计、文档版本管理 |
 | [安全规范](./05-security-standards.md) | XSS、Token 安全、输入校验、CSRF、敏感信息 |
@@ -62,8 +62,9 @@ description: Use when writing, reviewing, or refactoring code across any RTC Age
 | [并发规范](./golang/concurrency.md) | goroutine 管理、channel 模式、context 使用 |
 | [项目结构](./golang/project-structure.md) | 目录布局、模块划分、依赖管理 |
 | [可观测性](./golang/observability.md) | 日志、追踪、指标采集、健康检查 |
-| [代码质量](./golang/code-quality.md) | 重复代码、废弃代码、事务上下文、Redis Lua、PR 自检 |
+| [代码质量](./golang/code-quality.md) | 重复代码、废弃代码、事务上下文、Redis Lua、LLM 内容预处理、PR 自检 |
 | [后端性能](./golang/performance.md) | 数据库优化、并发、缓存、Centrifuge、pprof |
+| [LLM 消息规范化](./golang/llm-message-normalization.md) | 消息管道、连续角色合并、工具配对修复、Content/MultiContent 映射 |
 | [Eino TurnLoop](./golang/eino-turn-loop/README.md) | Agent 取消、多轮循环、抢占与中止机制 |
 
 ---

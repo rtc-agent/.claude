@@ -87,11 +87,12 @@ type DB struct {
 |------|------|
 | [代码风格](./code-style.md) | `gofmt`、命名约定、包组织、导入分组、注释格式 |
 | [错误处理](./error-handling.md) | 错误传播模式、自定义错误类型、`%w` 包装、panic 边界 |
-| [并发规范](./concurrency.md) | goroutine 生命周期、panic 拦截、channel 模式、context 使用、sync 原语 |
+| [并发规范](./concurrency.md) | goroutine 生命周期、panic 拦截、channel 模式、context 使用、sync 原语、defer 阻塞保护 |
 | [项目结构](./project-structure.md) | 目录布局、模块划分、依赖注入、配置管理 |
 | [可观测性](./observability.md) | 结构化日志、分布式追踪、指标采集、健康检查 |
-| [代码质量](./code-quality.md) | 重复代码、废弃代码、事务上下文、Redis Lua、PR 自检清单 |
+| [代码质量](./code-quality.md) | 重复代码、废弃代码、事务上下文、Redis Lua、LLM 内容预处理、分页终止约束、PR 自检清单 |
 | [后端性能](./performance.md) | 数据库优化、并发、缓存、Centrifuge、pprof |
+| [LLM 消息规范化](./llm-message-normalization.md) | 消息管道、连续角色合并、工具配对修复、Content/MultiContent 双字段映射 |
 
 ---
 

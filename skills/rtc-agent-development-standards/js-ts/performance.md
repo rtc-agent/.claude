@@ -203,6 +203,54 @@ disconnectedCallback() {
 }
 ```
 
+### Object URL 生命周期
+
+`URL.createObjectURL()` 创建的 Blob URL 会持有对底层 Blob 数据的引用。如果不调用 `URL.revokeObjectURL()` 释放，Blob 数据会一直驻留在内存中，直到页面关闭。对于频繁创建 Blob URL 的场景（图片预览、文件下载、Worker 脚本加载），泄漏会累积导致内存持续增长。
+
+```typescript
+// ✅ 成对使用 createObjectURL / revokeObjectURL
+private _objectUrl: string | null = null
+
+private async _loadPreview(blob: Blob): Promise<void> {
+  // 释放旧的 URL（如果有）
+  this._revokeObjectUrl()
+  this._objectUrl = URL.createObjectURL(blob)
+  this._imgSrc = this._objectUrl
+}
+
+private _revokeObjectUrl(): void {
+  if (this._objectUrl) {
+    URL.revokeObjectURL(this._objectUrl)
+    this._objectUrl = null
+  }
+}
+
+// 在组件销毁或内容切换时清理
+disconnectedCallback(): void {
+  super.disconnectedCallback()
+  this._revokeObjectUrl()
+}
+
+// ❌ 创建后不释放，每次预览都泄漏一个 Blob
+private async _loadPreview(blob: Blob): Promise<void> {
+  this._imgSrc = URL.createObjectURL(blob)  // 旧 URL 永远不会被 revoke
+}
+```
+
+**约束**：
+
+- 每次调用 `createObjectURL()` 前，必须先 `revokeObjectURL()` 上一个 URL（如果存在）
+- `disconnectedCallback()` 中必须 revoke 所有未释放的 Object URL
+- 内容切换时（如预览不同文件），旧 URL 必须在创建新 URL 前释放
+- 使用 `@state` 保存 URL 引用，确保清理逻辑可以访问当前值
+
+**适用场景**：
+
+- 图片/文件预览（`rtc-file-preview-modal`）
+- 文件缩略图加载（`rtc-file-thumbnail`）
+- Worker 脚本的 Blob URL 加载（`worker-bridge`）
+- 文件导出下载（`session-exporter`）
+
 ---
 
 ## 5. 性能指标
@@ -226,6 +274,7 @@ disconnectedCallback() {
 - [ ] 事件监听器在 `disconnectedCallback` 清理
 - [ ] Floating UI cleanup 调用
 - [ ] GSAP 动画 `kill()` 清理
+- [ ] Object URL `revokeObjectURL()` 清理
 - [ ] Bundle 体积在预算内
 
 ---

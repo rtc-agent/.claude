@@ -16,12 +16,14 @@
 !hooks/**
 !skills/
 !skills/**
-!reviews/
-!reviews/**
-!workflows/
-!workflows/**
-!docs-update-logs/
-!docs-update-logs/**
 
 # Allow settings files
 !settings.json
+
+# Explicitly ignored directories
+reviews/
+reviews/**
+workflows/
+workflows/**
+docs-update-logs/
+docs-update-logs/**

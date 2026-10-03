@@ -13,26 +13,34 @@ server/
 ├── main.go                      # 程序入口
 ├── cmd/                         # Cobra 子命令
 ├── internal/                    # 私有业务逻辑
+│   ├── agent/               # LLM Agent 核心（消息转换、文件加载、工具注册、消息规范化）
 │   ├── handler/                 # 协议适配层
-│   │   ├── http/                # HTTP API
+│   │   ├── http/                # HTTP API（含 oss3*.go S3 兼容层）
 │   │   └── rpc/                 # RPC 接口
 │   ├── usecase/                 # 业务逻辑层
+│   │   └── primitives/          # 跨层校验原语（格式校验 + 标识符构造 + 存在性检查）
 │   ├── repo/                    # 数据访问层
 │   ├── model/                   # 数据模型
 │   ├── svc/                     # Service Context（DI 容器）
 │   └── infra/                   # 基础设施
 │       ├── middleware/          # 中间件
 │       ├── httputil/            # HTTP 工具
-│       ├── context/             # Context 工具
+│       ├── contextx/            # Context key 集中定义（跨层共享）
 │       ├── cache/               # 缓存
 │       ├── config/              # 配置加载
 │       └── auth/                # 认证
 ├── pkg/                         # 可复用包
 │   ├── centrifuge-plus/         # Centrifuge 扩展
-│   ├── logger/                  # 日志
-│   ├── turn-agent/              # TURN agent
+│   ├── circuitbreaker/          # 断路器
+│   ├── logger/                  # 日志（含 SafeGo 并发安全启动）
+│   ├── memory/                  # 内存管理工具
+│   ├── protocol/                # 协议定义
+│   ├── proxy/                   # 代理服务
+│   ├── rtc-oss3/                # S3 兼容存储后端（SigV4、OSS 操作）
 │   ├── rtc-queue/               # RTC 队列
-│   └── protocol/                # 协议定义
+│   ├── turn-agent/              # TURN agent（Eino turn loop）
+│   ├── webfetch/                # Web 内容抓取
+│   └── websearch/               # Web 搜索
 ├── etc/                         # 配置文件
 │   └── dev/                     # 开发环境配置
 ├── scripts/                     # 脚本
@@ -81,8 +89,10 @@ func NewServiceContext(cfg *config.Config) *ServiceContext {
 |------|------|---------|
 | `main.go` | 程序入口，解析命令行，调用 `cmd/` | 业务逻辑 |
 | `cmd/` | Cobra 子命令定义 | 业务逻辑 |
+| `internal/agent/` | LLM Agent 核心：消息转换、文件加载、工具注册、消息规范化、目标工作流 | HTTP/RPC 细节、SQL |
 | `internal/handler/` | 协议适配（HTTP/RPC），参数校验，响应格式化 | 业务逻辑 |
 | `internal/usecase/` | 业务逻辑编排，事务管理 | HTTP/RPC 细节、SQL |
+| `internal/usecase/primitives/` | 跨层校验原语：格式校验 + 标识符构造 + 存在性检查，供 handler/usecase 调用 | 业务编排、HTTP/RPC 细节 |
 | `internal/repo/` | 数据访问（数据库、缓存、外部 API） | 业务逻辑 |
 | `internal/model/` | 数据模型定义（struct、常量） | 业务逻辑 |
 | `internal/svc/` | DI 容器，依赖组装 | 业务逻辑 |
@@ -118,6 +128,68 @@ internal/
 - 同一领域的代码在不同层使用相同的包名或文件名
 - 例如：`handler/user.go`、`usecase/user.go`、`repo/user.go` 都是用户相关
 
+### 大型包的子包拆分
+
+当某个 `internal/` 包增长到 50+ 文件时（如 `internal/agent/` 有 80+ 文件），可以将辅助工具提取为子包。子包只包含可独立理解的工具代码，不包含业务逻辑。
+
+```
+internal/agent/
+├── agent.go                    # 主入口
+├── data_context.go             # 数据加载
+├── data_context_convert.go     # 消息转换
+├── file_loader.go              # 文件加载（图片预处理、文本截断）
+├── message_normalizer.go       # 消息规范化
+├── tools.go                    # 工具注册
+├── tools_*.go                  # 各工具实现（30+ 文件）
+├── command/                    # 子包：命令解析工具
+│   ├── command.go
+│   ├── registry.go
+│   └── template.go
+├── prompts/                    # 子目录：提示词模板（.md / .md.tmpl 文件）
+├── stringutil/                 # 子包：字符串工具
+│   └── stringutil.go
+├── templateutil/               # 子包：模板工具
+│   └── templateutil.go
+└── util/                       # 子包：通用工具（map 操作等）
+    └── maps.go
+```
+
+**约束**：
+
+- 子包不导入父包（避免循环依赖）
+- 子包只包含无状态的工具函数或纯数据类型，不包含业务逻辑
+- 子包命名用小写单词，与父包名无前缀关系（`command/` 而非 `agentcommand/`）
+- 业务逻辑仍留在父包，子包只提供"可独立测试和复用"的基础能力
+
+### 大型 handler 模块的操作拆分
+
+当一个协议兼容层模块（如 OSS3 S3 handler）增长到 1000+ 行时，按操作拆分为多个文件。每个文件负责一个 S3/HTTP 操作，共享中间件和辅助函数通过同包的 `utils`/`middleware` 文件提供。
+
+```
+internal/handler/http/
+├── oss3.go                    # 路由注册、共享 handler 结构
+├── oss3_middleware.go         # 认证、日志、指标等中间件
+├── oss3_get.go                # GetObject
+├── oss3_put.go                # PutObject
+├── oss3_delete.go             # DeleteObject
+├── oss3_copy.go               # CopyObject
+├── oss3_list.go               # ListObjects / ListObjectsV2
+├── oss3_multipart.go          # 多部分上传协调
+├── oss3_mp_upload.go          # UploadPart
+├── oss3_mp_complete.go        # CompleteMultipartUpload
+├── oss3_mp_abort_list.go      # Abort/List multipart uploads
+├── oss3_cors.go               # CORS 配置
+├── oss3_sigv4.go              # SigV4 签名验证
+└── oss3_test_helpers_test.go  # 共享测试 fixtures
+```
+
+**约束**：
+
+- 每个操作文件保持在 500 行以内，遵循通用大文件约束
+- 共享类型（如 `OSS3Handler` struct、中间件）放在主文件（如 `oss3.go`）或专用文件中
+- 测试文件按职责拆分（参见 [测试规范 - 测试文件命名分类](../02-testing-standards.md#测试文件命名分类)）
+- 新增操作时，优先创建独立文件而非追加到已有文件
+
 ### 可选演进：按领域划分
 
 当项目规模增大时，可以考虑按领域重组：
@@ -145,6 +217,65 @@ internal/
 - 不强制立即迁移，按需渐进
 - 新增领域优先考虑领域驱动组织
 - 现有代码可在重构时逐步迁移
+
+---
+
+## 3a. 跨层基础设施约定
+
+### Context key 集中管理（`contextx/`）
+
+所有跨层传递的 context key 集中在 `internal/infra/contextx/` 定义，提供类型安全的 `Get*` / `With*` 访问器对。业务代码不直接使用 `context.WithValue` + 裸 key。
+
+```go
+// internal/infra/contextx/keys.go
+type contextKey struct{ name string }  // 未导出 struct，防止外部碰撞
+
+var (
+    userIDKey   = contextKey{"user_id"}
+    deviceIDKey = contextKey{"device_id"}
+)
+
+// 类型安全的读取
+func GetUserID(ctx context.Context) (uuid.UUID, bool) {
+    id, ok := ctx.Value(userIDKey).(uuid.UUID)
+    return id, ok
+}
+
+// 类型安全的注入
+func WithClientInfo(ctx context.Context, userID uuid.UUID, deviceID string) context.Context {
+    ctx = context.WithValue(ctx, userIDKey, userID)
+    ctx = context.WithValue(ctx, deviceIDKey, deviceID)
+    return ctx
+}
+```
+
+**约束**：
+
+- 新增 context key 时，在 `contextx/` 中注册，不分散定义
+- 使用未导出 struct 类型作为 key（防止其他包创建冲突 key）
+- 按子系统分组命名（如 OSS3 相关 key 加 `oss3` 前缀）
+- 复合数据存为 struct 类型（如 `OSS3ParsedPath{Bucket, Key}`），不在 context 中散落多个相关值
+- 当子系统 context key 达到 5 个以上时，提取到独立文件 `keys_<subsystem>.go`（如 `keys_oss3.go`），保持 `keys.go` 只包含跨子系统通用的 key
+
+### Redis key 集中注册（`cache/keys.go`）
+
+所有 Redis key 的 prefix 常量和构造函数集中在 `internal/infra/cache/keys.go` 注册。业务代码不硬编码 key 字符串。
+
+```go
+// cache/keys.go — 集中注册
+const PrefixOSS3Quota = "oss3:quota:"
+
+func OSS3Quota(userID string) string { return PrefixOSS3Quota + userID }
+// 注释记录完整 key 格式、值类型、TTL
+// Full key: oss3:quota:{user_id}
+// Value: total bytes used (int64); no TTL (persistent, reconciled by cleanup).
+```
+
+**约束**：
+
+- 新增 key 类型必须在 `keys.go` 注册（便于全局搜索和冲突检测）
+- 每个 prefix 必须有对应的构造函数
+- 注释中记录 key 格式、值类型、TTL
 
 ---
 
@@ -261,34 +392,75 @@ etc/
 ### 配置结构体
 
 ```go
-// internal/infra/config/config.go
+// internal/infra/config/config.go — 类型定义
 type Config struct {
-    Server   ServerConfig   `yaml:"server"`
-    Database DatabaseConfig `yaml:"database"`
-    Log      LogConfig      `yaml:"log"`
+    Server    ServerConfig    `mapstructure:"server"`
+    Database  DatabaseConfig  `mapstructure:"database"`
+    // ...
 }
 
 type ServerConfig struct {
-    Port    int    `yaml:"port"`
-    Host    string `yaml:"host"`
-}
-
-type DatabaseConfig struct {
-    DSN          string `yaml:"dsn"`
-    MaxOpenConns int    `yaml:"maxOpenConns"`
+    Port    int    `mapstructure:"port"`
+    Host    string `mapstructure:"host"`
 }
 ```
+
+### 三文件组织
+
+配置模块拆分为三个文件，各司其职：
+
+| 文件 | 职责 | 内容 |
+|------|------|------|
+| `config.go` | 类型定义 + 加载逻辑 | `Config` struct、`Load()` 函数 |
+| `config_defaults.go` | 默认值注册 | `setDefaults()` + 各模块 `set*Defaults()` |
+| `config_validation.go` | 校验逻辑 | `Config.Validate()` + 各子 struct 的 `Validate()` |
+
+```go
+// config_defaults.go — 按模块注册默认值
+func setDefaults(v *viper.Viper) {
+    setServerDefaults(v)
+    setAuthDefaults(v)
+    setCORSDefaults(v)
+    // ...
+}
+
+func setServerDefaults(v *viper.Viper) {
+    v.SetDefault("server.port", 8080)
+    v.SetDefault("server.host", "0.0.0.0")
+}
+
+// config_validation.go — 每个子 struct 独立校验
+func (c *Config) Validate() error {
+    if c.Database.DSN == "" {
+        return fmt.Errorf("database.dsn is required")
+    }
+    if err := c.Storage.Validate(); err != nil {
+        return err
+    }
+    // ...
+}
+
+func (c *StorageConfig) Validate() error { /* ... */ }
+func (c *AsynqConfig) Validate() error   { /* ... */ }
+```
+
+**约束**：
+
+- 新增配置项时，同时在 `config_defaults.go` 注册默认值、在 `config_validation.go` 添加校验（如需要）
+- 默认值使用 `viper.SetDefault()`，不使用 struct tag 的 `default`
+- 校验函数返回第一个发现的错误（fail-fast），不收集所有错误
+- 使用局部 `viper.New()` 实例，不污染全局状态——保证并行测试安全
 
 ### 环境变量覆盖
 
-环境变量优先级高于配置文件，适合敏感信息和部署时的动态配置。
+环境变量优先级高于配置文件。使用 `__` 双下划线映射嵌套字段：
 
 ```go
-// 环境变量覆盖配置文件
-if dsn := os.Getenv("DATABASE_DSN"); dsn != "" {
-    cfg.Database.DSN = dsn
-}
+// 环境变量映射：DATABASE__DSN -> database.dsn
+v.SetEnvKeyReplacer(strings.NewReplacer(".", "__"))
 ```
+
+敏感字段支持 `${VAR_NAME}` 展开，通过 `expandEnvVars()` 在加载后处理。
 
 ### 敏感信息
 
